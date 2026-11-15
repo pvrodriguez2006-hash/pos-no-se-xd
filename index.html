@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tablero de sonidos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&display=swap">
+<style>
+:root{
+  --bg:#E8EDF3; --surface:#FFFFFF; --ink:#14213D; --muted:#5B6784; --line:#CBD3E1;
+  --c0:#2D5BFF; --c1:#E0A100; --c2:#00917F; --c3:#D6336C; --on:#FFFFFF;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#141A2B;--surface:#1E2640;--ink:#EEF1FA;--muted:#A3ADC8;--line:#323C5C;--c0:#6F8CFF;--c1:#FFC93C;--c2:#2FD3BC;--c3:#FF6B9E;--on:#101528;color-scheme:dark}
+}
+:root[data-theme="dark"]{--bg:#141A2B;--surface:#1E2640;--ink:#EEF1FA;--muted:#A3ADC8;--line:#323C5C;--c0:#6F8CFF;--c1:#FFC93C;--c2:#2FD3BC;--c3:#FF6B9E;--on:#101528;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+main{max-width:720px;margin:0 auto;padding:20px 16px 40px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+h1{font-size:1.7rem;font-weight:800;margin:0;letter-spacing:-.02em}
+.top button{margin-left:8px}
+button{font:inherit;cursor:pointer;border:2px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;padding:10px 14px;font-weight:500;min-height:44px}
+button:focus-visible{outline:3px solid var(--c0);outline-offset:2px}
+button:active{transform:scale(.97)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+@media(min-width:560px){.grid{grid-template-columns:repeat(3,1fr)}}
+.pad{background:var(--surface);border:2px solid var(--line);border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.name{font-size:.9rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px}
+.play{border:0;border-radius:14px;aspect-ratio:1/1;width:100%;background:var(--accent);color:var(--on);font-size:2.6rem;font-weight:800;display:grid;place-items:center;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.play.empty{background:transparent;border:2px dashed var(--accent);color:var(--accent);font-size:1rem;font-weight:500;padding:12px;text-align:center}
+.play.hit{animation:hit .18s ease-out}
+@keyframes hit{0%{transform:scale(.92)}100%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.play.hit{animation:none}}
+.row{display:flex;gap:6px}
+.row button{flex:1;padding:8px 4px;font-size:.85rem;min-height:40px}
+.msg{min-height:1.3em;color:var(--muted);font-size:.9rem;margin:14px 2px 0}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Tablero de sonidos</h1>
+    <div class="top">
+      <button id="stopAll">Detener todo</button>
+      <button id="add">Añadir botón</button>
+    </div>
+  </header>
+  <div class="grid" id="grid"></div>
+  <p class="msg" id="msg">Toca un botón vacío para elegir un audio de tu dispositivo.</p>
+</main>
+<script>
+(function(){
+  var ctx=null, pads=[], grid=document.getElementById('grid'), msg=document.getElementById('msg');
+  var colors=['var(--c0)','var(--c1)','var(--c2)','var(--c3)'];
+  var AC=window.AudioContext||window.webkitAudioContext;
+
+  function audio(){
+    if(!ctx) ctx=new AC();
+    if(ctx.state==='suspended') ctx.resume();
+    return ctx;
+  }
+  function say(t){msg.textContent=t}
+
+  function makePad(i){
+    var p={buffer:null,name:'',sources:[]};
+    var el=document.createElement('div'); el.className='pad'; el.style.setProperty('--accent',colors[i%4]);
+    var nm=document.createElement('div'); nm.className='name'; nm.textContent='Sin audio';
+    var play=document.createElement('button'); play.className='play empty'; play.textContent='Elegir audio'; play.type='button';
+    var row=document.createElement('div'); row.className='row';
+    var change=document.createElement('button'); change.textContent='Cambiar';
+    var stop=document.createElement('button'); stop.textContent='Parar';
+    var del=document.createElement('button'); del.textContent='Quitar';
+    var file=document.createElement('input'); file.type='file'; file.accept='audio/*';
+    row.append(change,stop,del); el.append(nm,play,row,file);
+
+    function pick(){file.click()}
+    function trigger(){
+      if(!p.buffer){pick();return}
+      var c=audio(), s=c.createBufferSource();
+      s.buffer=p.buffer; s.connect(c.destination);
+      p.sources.push(s);
+      s.onended=function(){var k=p.sources.indexOf(s); if(k>-1)p.sources.splice(k,1)};
+      s.start(0);
+      play.classList.remove('hit'); void play.offsetWidth; play.classList.add('hit');
+    }
+    play.addEventListener('pointerdown',function(e){e.preventDefault();trigger()});
+    play.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();trigger()}});
+    change.addEventListener('click',pick);
+    stop.addEventListener('click',function(){stopPad(p)});
+    del.addEventListener('click',function(){stopPad(p);pads.splice(pads.indexOf(p),1);el.remove()});
+    file.addEventListener('change',function(){
+      var f=file.files&&file.files[0]; if(!f)return;
+      say('Cargando '+f.name+'…');
+      f.arrayBuffer().then(function(ab){
+        return new Promise(function(ok,no){audio().decodeAudioData(ab,ok,no)});
+      }).then(function(buf){
+        stopPad(p); p.buffer=buf; p.name=f.name;
+        nm.textContent=f.name.replace(/\.[^.]+$/,'');
+        play.classList.remove('empty'); play.textContent='▶';
+        say('Listo: toca ▶ las veces que quieras, se superponen.');
+      }).catch(function(){say('No se pudo leer ese archivo. Prueba con MP3, WAV, OGG o M4A.')});
+      file.value='';
+    });
+    p.el=el; pads.push(p); grid.appendChild(el);
+  }
+  function stopPad(p){p.sources.slice().forEach(function(s){try{s.stop()}catch(e){}}); p.sources=[]}
+
+  document.getElementById('add').addEventListener('click',function(){makePad(pads.length)});
+  document.getElementById('stopAll').addEventListener('click',function(){pads.forEach(stopPad)});
+  for(var i=0;i<6;i++) makePad(i);
+})();
+</script>
+</body>
+</html>
